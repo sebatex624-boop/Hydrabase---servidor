@@ -6,38 +6,37 @@ app.use(cors());
 app.use(express.json());
 
 // ─────────────────────────────────────
-// ESTADO COMPARTIDO
+// ESTADO — sin valores fijos, espera la app
 // ─────────────────────────────────────
 let estado = {
-  mlMeta:      2000,   // Meta diaria enviada desde la app
-  mlRestantes: 2000,   // Actualizado por el ESP32
+  mlMeta:      0,    // Se llena cuando la app envía los datos del usuario
+  mlRestantes: 0,    // Se actualiza cuando el ESP32 presiona el botón
   ultimaActualizacion: null
 };
 
 // ─────────────────────────────────────
 // ESP32 → SERVIDOR
-// Recibe los ml restantes del circuito
 // ─────────────────────────────────────
 app.get('/esp32/update', (req, res) => {
   const ml = parseInt(req.query.ml);
-  if (!isNaN(ml)) {
-    estado.mlRestantes          = ml;
-    estado.ultimaActualizacion  = new Date().toISOString();
+  if (!isNaN(ml) && estado.mlMeta > 0) {
+    estado.mlRestantes         = ml;
+    estado.ultimaActualizacion = new Date().toISOString();
     console.log(`ESP32 reporta: ${ml} ml restantes`);
   }
-  // Responde con la meta actual para que el ESP32 la muestre en el LCD
   res.json({ mlMeta: estado.mlMeta });
 });
 
 // ─────────────────────────────────────
 // APP WEB → SERVIDOR
-// Envía la meta diaria calculada
+// Recibe la meta calculada según el usuario
 // ─────────────────────────────────────
 app.post('/app/meta', (req, res) => {
   const { mlMeta } = req.body;
-  if (mlMeta && !isNaN(mlMeta)) {
-    estado.mlMeta      = parseInt(mlMeta);
-    estado.mlRestantes = parseInt(mlMeta); // reinicia los restantes
+  if (mlMeta && !isNaN(mlMeta) && mlMeta > 0) {
+    estado.mlMeta              = parseInt(mlMeta);
+    estado.mlRestantes         = parseInt(mlMeta); // inicia con la meta completa
+    estado.ultimaActualizacion = new Date().toISOString();
     console.log(`App envió meta: ${mlMeta} ml`);
   }
   res.json({ ok: true });
@@ -52,15 +51,12 @@ app.get('/app/estado', (req, res) => {
 });
 
 // ─────────────────────────────────────
-// HEALTH CHECK (Railway lo necesita)
+// HEALTH CHECK
 // ─────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({ status: 'HYDRABASE servidor activo', estado });
 });
 
-// ─────────────────────────────────────
-// INICIAR SERVIDOR
-// ─────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor HYDRABASE corriendo en puerto ${PORT}`);
